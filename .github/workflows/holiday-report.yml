@@ -1,0 +1,62 @@
+name: Holiday Comparison Report
+
+# Run manually from the Actions tab. Provide the source system (tab) name.
+on:
+  workflow_dispatch:
+    inputs:
+      source_system:
+        description: "Source system / tab name to compare everything against (e.g. WS)"
+        required: true
+        type: string
+      input_file:
+        description: "Path to the Excel file (leave blank to use the newest file in input/)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run comparison
+        run: |
+          FILE_ARG=""
+          if [ -n "${{ inputs.input_file }}" ]; then
+            FILE_ARG="--file ${{ inputs.input_file }}"
+          fi
+          python compare_holidays.py \
+            --source "${{ inputs.source_system }}" \
+            $FILE_ARG \
+            --output "output/holiday_comparison.csv"
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: holiday-comparison-report
+          path: output/holiday_comparison.csv
+
+      - name: Commit report back to the repo
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add output/holiday_comparison.csv
+          if git diff --staged --quiet; then
+            echo "No changes to the report."
+          else
+            git commit -m "Update holiday comparison report (source: ${{ inputs.source_system }})"
+            git push
+          fi
