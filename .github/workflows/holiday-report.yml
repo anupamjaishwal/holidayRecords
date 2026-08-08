@@ -9,7 +9,7 @@ on:
         required: true
         type: string
       input_file:
-        description: "Path to the Excel file (leave blank to use the newest file in input/)"
+        description: "Excel filename in input/ (e.g. calendar_2026.xlsx). Leave blank to use the newest file in input/"
         required: false
         type: string
         default: ""

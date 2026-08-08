@@ -48,10 +48,12 @@ dates in the workbook and to write dates in the report.
 
 ## Run it via GitHub Actions (no local setup)
 
-1. Put your workbook in the `input/` folder (commit it), e.g. `input/holidays.xlsx`.
+1. Put your workbook in the `input/` folder (commit it) — **any filename works**,
+   e.g. `input/calendar_2026.xlsx`.
 2. Go to the **Actions** tab → **Holiday Comparison Report** → **Run workflow**.
-3. Enter the **source system** (tab name, e.g. `WSS`). Optionally set a specific
-   file and/or the date format.
+3. Enter the **source system** (tab name, e.g. `WSS`). In the file field, type the
+   filename (e.g. `calendar_2026.xlsx`) — or leave it blank to use the newest file
+   in `input/`. Optionally set the date format.
 4. The report is uploaded as a downloadable **artifact** and committed to
    `output/holiday_comparison.csv`.
 

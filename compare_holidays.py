@@ -301,7 +301,13 @@ def main(argv=None):
         print(f"Using input file: {path}")
 
     if not os.path.exists(path):
-        parser.error(f"File not found: {path}")
+        # Allow a bare filename: look for it inside input/.
+        alt = os.path.join("input", path)
+        if os.path.exists(alt):
+            path = alt
+            print(f"Using input file: {path}")
+        else:
+            parser.error(f"File not found: {path} (also looked in input/)")
 
     systems, order = read_workbook(path, parse_formats)
     if not systems:
