@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: ""
+      date_format:
+        description: "Date format for parsing/reporting (e.g. MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD)"
+        required: false
+        type: string
+        default: "MM/DD/YYYY"
 
 permissions:
   contents: write
@@ -40,6 +45,7 @@ jobs:
           fi
           python compare_holidays.py \
             --source "${{ inputs.source_system }}" \
+            --date-format "${{ inputs.date_format }}" \
             $FILE_ARG \
             --output "output/holiday_comparison.csv"
 

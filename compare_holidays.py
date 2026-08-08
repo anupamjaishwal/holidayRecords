@@ -49,12 +49,24 @@ from openpyxl import load_workbook
 # A cell counts as a "currency code" if it is 3 alphabetic characters.
 CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
 
-# Header keywords used to recognise the LONG layout.
-CURRENCY_HEADERS = {"currency", "ccy", "curr", "currency code"}
+# Header keywords used to recognise the LONG layout. The "System" column is
+# intentionally NOT listed here — the system name always comes from the tab name.
+CURRENCY_HEADERS = {"currency", "ccy", "curr", "currency code", "holiday ccy", "holiday currency"}
 DATE_HEADERS = {"date", "dates", "holiday", "holiday date", "holidays", "holiday dates", "value"}
 
-# Accepted textual date formats (MM/DD/YYYY is the documented default).
-DATE_FORMATS = ("%m/%d/%Y", "%m/%d/%y", "%Y-%m-%d", "%d/%m/%Y", "%m-%d-%Y")
+# Fallback textual date formats always tried after the user-selected one.
+FALLBACK_DATE_FORMATS = ("%m/%d/%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%y", "%m-%d-%Y")
+
+# Friendly date-format tokens -> strptime/strftime patterns (longest token first).
+_FMT_TOKENS = (("YYYY", "%Y"), ("YY", "%y"), ("MM", "%m"), ("DD", "%d"))
+
+
+def friendly_to_strftime(token: str) -> str:
+    """Convert a friendly format like 'MM/DD/YYYY' to '%m/%d/%Y'."""
+    result = token.strip()
+    for src, dst in _FMT_TOKENS:
+        result = result.replace(src, dst)
+    return result
 
 
 def norm_currency(value) -> str | None:
@@ -67,8 +79,12 @@ def norm_currency(value) -> str | None:
     return None
 
 
-def parse_date(value):
-    """Return a datetime.date from a cell value, or None if it isn't a date."""
+def parse_date(value, formats):
+    """Return a datetime.date from a cell value, or None if it isn't a date.
+
+    Real Excel date cells arrive as datetime and need no format. Text dates are
+    parsed with `formats` (the user-chosen format first, then fallbacks).
+    """
     if value is None:
         return None
     if isinstance(value, dt.datetime):
@@ -78,7 +94,7 @@ def parse_date(value):
     text = str(value).strip()
     if not text:
         return None
-    for fmt in DATE_FORMATS:
+    for fmt in formats:
         try:
             return dt.datetime.strptime(text, fmt).date()
         except ValueError:
@@ -110,10 +126,12 @@ def _find_header_columns(rows):
     return None
 
 
-def parse_sheet(rows):
+def parse_sheet(rows, formats):
     """Parse one sheet's rows into a set of (currency, date) pairs.
 
     Handles LONG and WIDE layouts. `rows` is a list of tuples of cell values.
+    The system name is NOT taken from the sheet contents (a "System" column is
+    ignored) — callers key results by the tab/sheet name instead.
     """
     pairs: set[tuple[str, dt.date]] = set()
     if not rows:
@@ -127,7 +145,7 @@ def parse_sheet(rows):
             if cur_col >= len(row) or date_col >= len(row):
                 continue
             currency = norm_currency(row[cur_col])
-            date = parse_date(row[date_col])
+            date = parse_date(row[date_col], formats)
             if currency and date:
                 pairs.add((currency, date))
         return pairs
@@ -152,7 +170,7 @@ def parse_sheet(rows):
         for row in rows[header_row_idx + 1:]:
             for c_idx, currency in col_currency.items():
                 if c_idx < len(row):
-                    date = parse_date(row[c_idx])
+                    date = parse_date(row[c_idx], formats)
                     if date:
                         pairs.add((currency, date))
         return pairs
@@ -168,7 +186,7 @@ def parse_sheet(rows):
             cell = row[c_idx]
             if looks_like_currency(cell):
                 currency_score[c_idx] += 1
-            elif parse_date(cell) is not None:
+            elif parse_date(cell, formats) is not None:
                 date_score[c_idx] += 1
 
     if max(currency_score, default=0) == 0:
@@ -183,20 +201,23 @@ def parse_sheet(rows):
             continue
         for dc in date_cols:
             if dc < len(row):
-                date = parse_date(row[dc])
+                date = parse_date(row[dc], formats)
                 if date:
                     pairs.add((currency, date))
     return pairs
 
 
-def read_workbook(path):
-    """Return {system_name: set((currency, date))} for every sheet."""
+def read_workbook(path, formats):
+    """Return {system_name: set((currency, date))} for every sheet.
+
+    System name = sheet/tab name (the in-sheet "System" column is ignored).
+    """
     wb = load_workbook(path, data_only=True, read_only=True)
     systems = {}
     order = []
     for sheet in wb.worksheets:
         rows = [tuple(r) for r in sheet.iter_rows(values_only=True)]
-        systems[sheet.title] = parse_sheet(rows)
+        systems[sheet.title] = parse_sheet(rows, formats)
         order.append(sheet.title)
     wb.close()
     return systems, order
@@ -212,7 +233,7 @@ def resolve_source(systems, requested):
     return None
 
 
-def build_report(systems, order, source):
+def build_report(systems, order, source, out_format):
     """Return (header_row, data_rows) for the CSV report."""
     other_systems = [s for s in order if s != source]
     system_cols = [source] + other_systems
@@ -230,7 +251,7 @@ def build_report(systems, order, source):
             flags[sysname] = "Y" if (currency, date) in systems[sysname] else "N"
         missing_in = [s for s in system_cols if flags[s] == "N"]
         status = "MATCH" if not missing_in else "MISMATCH"
-        row = [currency, date.strftime("%m/%d/%Y")]
+        row = [currency, date.strftime(out_format)]
         row += [flags[s] for s in system_cols]
         row += [status, "; ".join(missing_in)]
         data_rows.append(row)
@@ -256,7 +277,16 @@ def main(argv=None):
     parser.add_argument("--file", help="Path to the .xlsx file (defaults to the newest file in input/).")
     parser.add_argument("--source", required=True, help="Name of the source system (tab name), e.g. WS.")
     parser.add_argument("--output", default="output/holiday_comparison.csv", help="Path for the CSV report.")
+    parser.add_argument(
+        "--date-format",
+        default="MM/DD/YYYY",
+        help="Date format for parsing text dates and for the report, e.g. MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD.",
+    )
     args = parser.parse_args(argv)
+
+    out_format = friendly_to_strftime(args.date_format)
+    # Try the user's format first, then common fallbacks, when parsing text dates.
+    parse_formats = [out_format] + [f for f in FALLBACK_DATE_FORMATS if f != out_format]
 
     path = args.file
     if not path:
@@ -273,7 +303,7 @@ def main(argv=None):
     if not os.path.exists(path):
         parser.error(f"File not found: {path}")
 
-    systems, order = read_workbook(path)
+    systems, order = read_workbook(path, parse_formats)
     if not systems:
         parser.error("Workbook has no sheets.")
 
@@ -283,7 +313,7 @@ def main(argv=None):
             f"Source system '{args.source}' not found. Available tabs: {', '.join(order)}"
         )
 
-    header, data_rows, system_cols = build_report(systems, order, source)
+    header, data_rows, system_cols = build_report(systems, order, source, out_format)
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w", newline="", encoding="utf-8") as f:

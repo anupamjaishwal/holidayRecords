@@ -1,28 +1,42 @@
 #!/usr/bin/env python3
-"""Generate a sample holidays.xlsx (LONG layout) for testing/demo.
+"""Generate a sample holidays.xlsx matching the real layout, for testing/demo.
 
-Creates one tab per system. WS is intended to be used as the source.
+Real layout (per tab): columns  System | Holiday Ccy | Holiday Date
+The "System" column repeats the tab name and is IGNORED by the tool — the
+system name comes from the tab (sheet) name. WSS is intended as the source.
+
 Run:  python scripts/make_sample.py
 """
 import os
 from openpyxl import Workbook
 
-# system -> list of (currency, "MM/DD/YYYY")
+# tab (system) -> list of (currency, "MM/DD/YYYY")
 DATA = {
-    "WS": [  # source system
-        ("CAD", "01/01/2020"), ("CAD", "07/01/2020"), ("CAD", "12/25/2020"),
-        ("USD", "01/01/2020"), ("USD", "07/04/2020"),
-        ("HKD", "01/01/2020"), ("HKD", "10/01/2020"),
-    ],
-    "D3": [
-        ("CAD", "01/01/2020"), ("CAD", "07/01/2020"),           # missing 12/25
-        ("USD", "01/01/2020"), ("USD", "07/04/2020"), ("USD", "11/26/2020"),  # extra 11/26
-        ("HKD", "01/01/2020"), ("HKD", "10/01/2020"),
+    "WSS": [  # source system
+        ("CNY", "01/01/2026"), ("CNY", "02/16/2026"), ("CNY", "05/01/2026"),
+        ("PEN", "08/06/2026"),
+        ("AED", "08/07/2026"),
+        ("JPY", "08/11/2026"),
+        ("INR", "08/17/2026"),
     ],
     "Barracuda": [
-        ("CAD", "01/01/2020"), ("CAD", "07/01/2020"), ("CAD", "12/25/2020"),
-        ("USD", "01/01/2020"),                                   # missing 07/04
-        ("HKD", "01/01/2020"),                                   # missing 10/01
+        ("CNY", "01/01/2026"), ("CNY", "02/16/2026"),          # missing 05/01
+        ("PEN", "08/06/2026"),
+        ("AED", "08/07/2026"),
+        ("JPY", "08/11/2026"),
+        ("INR", "08/17/2026"), ("KRW", "08/17/2026"),          # extra KRW
+    ],
+    "Broadway": [
+        ("CNY", "01/01/2026"), ("CNY", "02/16/2026"), ("CNY", "05/01/2026"),
+        ("AED", "08/07/2026"),                                  # missing PEN
+        ("INR", "08/17/2026"),                                  # missing JPY
+    ],
+    "D3": [
+        ("CNY", "01/01/2026"), ("CNY", "05/01/2026"),          # missing 02/16
+        ("PEN", "08/06/2026"),
+        ("AED", "08/07/2026"),
+        ("JPY", "08/11/2026"),
+        ("INR", "08/17/2026"),
     ],
 }
 
@@ -32,9 +46,9 @@ def main():
     wb.remove(wb.active)
     for system, rows in DATA.items():
         ws = wb.create_sheet(title=system)
-        ws.append(["Currency", "Holiday Date"])
+        ws.append(["System", "Holiday Ccy", "Holiday Date"])
         for currency, date in rows:
-            ws.append([currency, date])
+            ws.append([system, currency, date])
     os.makedirs("input", exist_ok=True)
     out = "input/holidays.xlsx"
     wb.save(out)

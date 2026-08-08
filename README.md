@@ -9,12 +9,12 @@ system per pair — surfacing matches and mismatches — and writes a **CSV repo
 
 ## What the report looks like
 
-| Currency | Date | WS | D3 | Barracuda | Status | Missing_In |
-|----------|------|----|----|-----------|--------|------------|
-| CAD | 01/01/2020 | Y | Y | Y | MATCH | |
-| CAD | 12/25/2020 | Y | N | Y | MISMATCH | D3 |
-| USD | 07/04/2020 | Y | Y | N | MISMATCH | Barracuda |
-| USD | 11/26/2020 | N | Y | N | MISMATCH | WS; Barracuda |
+| Currency | Date | WSS | Barracuda | Broadway | D3 | Status | Missing_In |
+|----------|------|-----|-----------|----------|----|--------|------------|
+| AED | 08/07/2026 | Y | Y | Y | Y | MATCH | |
+| CNY | 05/01/2026 | Y | N | Y | Y | MISMATCH | Barracuda |
+| JPY | 08/11/2026 | Y | Y | N | Y | MISMATCH | Broadway |
+| KRW | 08/17/2026 | N | Y | N | N | MISMATCH | WSS; Broadway; D3 |
 
 - The **source column** comes first, then the other systems.
 - `Missing_In` lists every system that does **not** have that currency/date.
@@ -22,31 +22,36 @@ system per pair — surfacing matches and mismatches — and writes a **CSV repo
 
 ## Expected Excel format
 
-Each tab lists currencies (3-letter codes: `CAD`, `USD`, `HKD` …) and holiday
-dates in **MM/DD/YYYY**. Two layouts are auto-detected:
+Each **tab is one system**, and the tab/sheet name **is** the system name — so a
+`System` column inside the sheet is ignored (you don't need to remove it). Each
+tab lists currencies (3-letter codes: `CNY`, `USD`, `HKD` …) and holiday dates.
 
-**LONG** (recommended) — a `Currency` column and a `Holiday Date` column:
+**Standard layout** — `System` (optional, ignored), `Holiday Ccy`, `Holiday Date`:
 
-| Currency | Holiday Date |
-|----------|--------------|
-| CAD | 01/01/2020 |
-| CAD | 07/01/2020 |
-| USD | 01/01/2020 |
+| System | Holiday Ccy | Holiday Date |
+|--------|-------------|--------------|
+| WSS | CNY | 01/01/2026 |
+| WSS | CNY | 02/16/2026 |
+| WSS | PEN | 08/06/2026 |
 
-**WIDE** — currency codes as headers, dates down each column:
+The currency column is recognised from headers like `Holiday Ccy`, `Currency`,
+`Ccy`; the date column from `Holiday Date`, `Date`. A `WIDE` layout (currency
+codes as column headers, dates listed beneath) is also auto-detected. Real Excel
+date cells are accepted as well as text.
 
-| CAD | USD | HKD |
-|-----|-----|-----|
-| 01/01/2020 | 01/01/2020 | 01/01/2020 |
-| 07/01/2020 | | 10/01/2020 |
+### Date format
 
-Real Excel date cells are also accepted (not only text).
+Dates default to **MM/DD/YYYY**. To use a different format, pass `--date-format`
+locally or set the **Date format** input when running the workflow — e.g.
+`DD/MM/YYYY` or `YYYY-MM-DD`. The chosen format is used both to interpret text
+dates in the workbook and to write dates in the report.
 
 ## Run it via GitHub Actions (no local setup)
 
 1. Put your workbook in the `input/` folder (commit it), e.g. `input/holidays.xlsx`.
 2. Go to the **Actions** tab → **Holiday Comparison Report** → **Run workflow**.
-3. Enter the **source system** (tab name, e.g. `WS`). Optionally set a specific file.
+3. Enter the **source system** (tab name, e.g. `WSS`). Optionally set a specific
+   file and/or the date format.
 4. The report is uploaded as a downloadable **artifact** and committed to
    `output/holiday_comparison.csv`.
 
@@ -59,8 +64,11 @@ pip install -r requirements.txt
 python scripts/make_sample.py
 
 # compare — uses the newest file in input/ if --file is omitted
-python compare_holidays.py --source WS
-python compare_holidays.py --file input/holidays.xlsx --source WS --output output/holiday_comparison.csv
+python compare_holidays.py --source WSS
+python compare_holidays.py --file input/holidays.xlsx --source WSS --output output/holiday_comparison.csv
+
+# use a different date format (default is MM/DD/YYYY)
+python compare_holidays.py --source WSS --date-format DD/MM/YYYY
 ```
 
 The source name is matched case-insensitively; if it isn't found, the available
