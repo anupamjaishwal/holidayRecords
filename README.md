@@ -46,7 +46,37 @@ locally or set the **Date format** input when running the workflow — e.g.
 `DD/MM/YYYY` or `YYYY-MM-DD`. The chosen format is used both to interpret text
 dates in the workbook and to write dates in the report.
 
-## Run it via GitHub Actions (no local setup)
+## Use it in the browser — no login, no install (recommended)
+
+A self-contained web tool lives in `docs/`. It reads the Excel file **entirely in
+your browser** — nothing is uploaded to any server, and no GitHub account is
+needed to use it. This is the option for a locked-down / work machine.
+
+**Two ways to open it:**
+
+- **Hosted (public URL):** once GitHub Pages is enabled (see below), anyone can
+  visit `https://anupamjaishwal.github.io/holidayRecords/` and use it — no login.
+- **Offline:** download the repo (green **Code → Download ZIP**), unzip, and open
+  `docs/index.html` in a browser. Works with no network at all.
+
+**Steps:** pick your `.xlsx` → choose the **source system** → (optional) set the
+date format → **Compare** → **Download CSV**. Toggle *Show mismatches only* to
+focus on differences.
+
+> Requires a reasonably modern browser (Chrome/Edge/Firefox/Safari from ~2023+),
+> which is used to unzip the `.xlsx` locally.
+
+### One-time: enable the public URL (owner only)
+
+The repo owner does this once (it does require logging in, but only for setup —
+afterwards visitors need no login):
+
+1. **Settings → Pages**
+2. **Build and deployment → Source:** *Deploy from a branch*
+3. **Branch:** `main`, **Folder:** `/docs` → **Save**
+4. Wait ~1 minute; the site appears at `https://anupamjaishwal.github.io/holidayRecords/`.
+
+## Run it via GitHub Actions (owner only — requires login)
 
 1. Put your workbook in the `input/` folder (commit it) — **any filename works**,
    e.g. `input/calendar_2026.xlsx`.

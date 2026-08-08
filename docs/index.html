@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Holiday Records — Cross-System Comparison</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📅</text></svg>" />
+  <style>
+    :root {
+      --bg: #f6f7f9; --panel: #ffffff; --border: #e2e5ea; --text: #1c2430;
+      --muted: #5b6675; --accent: #2563eb; --accent-fg: #ffffff;
+      --yes-bg: #e6f4ea; --yes-fg: #1e7a3c; --no-bg: #fdeaea; --no-fg: #c0392b;
+      --match: #1e7a3c; --mismatch: #c0392b; --shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f141a; --panel: #171e26; --border: #2a333f; --text: #e6ebf1;
+        --muted: #9aa6b4; --accent: #3b82f6; --accent-fg: #ffffff;
+        --yes-bg: #10331f; --yes-fg: #6ee7a0; --no-bg: #3a1c1c; --no-fg: #f6a6a0;
+        --match: #6ee7a0; --mismatch: #f6a6a0; --shadow: 0 1px 3px rgba(0,0,0,.4);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg); color: var(--text); padding: 24px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    header h1 { font-size: 22px; margin: 0 0 4px; }
+    header p { margin: 0 0 20px; color: var(--muted); }
+    .panel {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px;
+    }
+    .controls { display: grid; gap: 16px; grid-template-columns: 1fr; }
+    @media (min-width: 720px) { .controls { grid-template-columns: 1.4fr 1fr 1fr auto; align-items: end; } }
+    label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+    input[type=file], select {
+      width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--bg); color: var(--text); font: inherit;
+    }
+    button {
+      padding: 10px 18px; border: 0; border-radius: 8px; background: var(--accent);
+      color: var(--accent-fg); font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    .hint { color: var(--muted); font-size: 13px; margin-top: 10px; }
+    .status { margin: 6px 0 0; font-size: 13px; }
+    .error { color: var(--mismatch); }
+    .summary { display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 14px; }
+    .summary div { font-size: 14px; }
+    .summary b { font-size: 20px; display: block; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    th { position: sticky; top: 0; background: var(--panel); font-weight: 600; }
+    td.y { color: var(--yes-fg); font-weight: 700; text-align: center; }
+    td.n { color: var(--no-fg); font-weight: 700; text-align: center; }
+    td.status-MATCH { color: var(--match); font-weight: 600; }
+    td.status-MISMATCH { color: var(--mismatch); font-weight: 600; }
+    tr.src-col th.src, td.src { background: rgba(37,99,235,.06); }
+    .filter-row { margin: 12px 0 0; }
+    .filter-row label { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+    .privacy { font-size: 12px; color: var(--muted); margin-top: 18px; text-align: center; }
+    code { background: var(--bg); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Holiday Records — Cross-System Comparison</h1>
+      <p>Each tab in the Excel file is one system. Pick the source system, and see which currency/date holidays match or are missing across the others. Everything runs in your browser — <strong>your file is never uploaded.</strong></p>
+    </header>
+
+    <div class="panel">
+      <div class="controls">
+        <div>
+          <label for="file">1. Excel file (.xlsx)</label>
+          <input type="file" id="file" accept=".xlsx" />
+        </div>
+        <div>
+          <label for="source">2. Source system</label>
+          <select id="source" disabled><option>— load a file first —</option></select>
+        </div>
+        <div>
+          <label for="fmt">3. Date format</label>
+          <select id="fmt">
+            <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+            <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+            <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+            <option value="DD.MM.YYYY">DD.MM.YYYY</option>
+          </select>
+        </div>
+        <div>
+          <button id="run" disabled>Compare</button>
+        </div>
+      </div>
+      <p class="status" id="status"></p>
+      <p class="hint">Tip: the tab/sheet name is used as the system name — an in-sheet “System” column is ignored. Dates default to MM/DD/YYYY.</p>
+    </div>
+
+    <div class="panel" id="results" hidden>
+      <div class="summary" id="summary"></div>
+      <div class="toolbar">
+        <div class="filter-row">
+          <label><input type="checkbox" id="onlyMismatch" /> Show mismatches only</label>
+        </div>
+        <button class="secondary" id="download">Download CSV</button>
+      </div>
+      <div class="tablewrap">
+        <table id="table"></table>
+      </div>
+    </div>
+
+    <p class="privacy">Runs entirely client-side · no server · no login · nothing leaves your device.</p>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let wb = null, lastReport = null, fileBaseName = "holiday_comparison";
+
+    function setStatus(msg, isError) {
+      const el = $("status");
+      el.textContent = msg || "";
+      el.className = "status" + (isError ? " error" : "");
+    }
+
+    async function readFileBuffer(file) {
+      const ab = await file.arrayBuffer();
+      return new Uint8Array(ab);
+    }
+
+    async function onFile() {
+      const file = $("file").files[0];
+      $("results").hidden = true;
+      $("run").disabled = true;
+      $("source").disabled = true;
+      if (!file) return;
+      fileBaseName = file.name.replace(/\.[^.]+$/, "") + "_comparison";
+      setStatus("Reading workbook…");
+      try {
+        const buf = await readFileBuffer(file);
+        wb = await HolidayCore.loadWorkbook(buf, $("fmt").value);
+        if (!wb.order.length) throw new Error("No sheets found in the workbook.");
+        const sel = $("source");
+        sel.innerHTML = "";
+        wb.order.forEach((name) => {
+          const o = document.createElement("option");
+          o.value = name; o.textContent = name;
+          sel.appendChild(o);
+        });
+        sel.disabled = false;
+        $("run").disabled = false;
+        setStatus(`Loaded ${wb.order.length} systems: ${wb.order.join(", ")}. Choose a source and click Compare.`);
+      } catch (e) {
+        wb = null;
+        setStatus("Could not read this file: " + e.message, true);
+      }
+    }
+
+    async function run() {
+      if (!wb) return;
+      setStatus("Comparing…");
+      try {
+        // Re-parse with the chosen date format so text-date interpretation is correct.
+        const buf = await readFileBuffer($("file").files[0]);
+        wb = await HolidayCore.loadWorkbook(buf, $("fmt").value);
+        const source = HolidayCore.resolveSource(wb.order, $("source").value);
+        lastReport = HolidayCore.buildReport(wb, source, $("fmt").value);
+        renderReport(lastReport, source);
+        setStatus("");
+      } catch (e) {
+        setStatus("Comparison failed: " + e.message, true);
+      }
+    }
+
+    function renderReport(rep, source) {
+      const s = rep.summary;
+      $("summary").innerHTML =
+        `<div><b>${s.total}</b> currency/date pairs</div>` +
+        `<div style="color:var(--match)"><b>${s.matches}</b> match in every system</div>` +
+        `<div style="color:var(--mismatch)"><b>${s.mismatches}</b> mismatch</div>` +
+        `<div>Source: <b>${source}</b></div>`;
+      buildTable(rep);
+      $("results").hidden = false;
+    }
+
+    function buildTable(rep) {
+      const onlyMismatch = $("onlyMismatch").checked;
+      const statusIdx = rep.header.length - 2;
+      let html = "<thead><tr class='src-col'>";
+      rep.header.forEach((h, i) => {
+        const isSrc = i === 2; // first system column = source
+        html += `<th class="${isSrc ? "src" : ""}">${h}</th>`;
+      });
+      html += "</tr></thead><tbody>";
+      for (const row of rep.rows) {
+        if (onlyMismatch && row[statusIdx] === "MATCH") continue;
+        html += "<tr>";
+        row.forEach((cell, i) => {
+          if (i >= 2 && i < statusIdx) {
+            const cls = (cell === "Y" ? "y" : "n") + (i === 2 ? " src" : "");
+            html += `<td class="${cls}">${cell}</td>`;
+          } else if (i === statusIdx) {
+            html += `<td class="status-${cell}">${cell}</td>`;
+          } else {
+            html += `<td>${cell}</td>`;
+          }
+        });
+        html += "</tr>";
+      }
+      html += "</tbody>";
+      $("table").innerHTML = html;
+    }
+
+    function download() {
+      if (!lastReport) return;
+      const csv = HolidayCore.toCSV(lastReport.header, lastReport.rows);
+      const blob = new Blob([csv], { type: "text/csv" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fileBaseName + ".csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    $("file").addEventListener("change", onFile);
+    $("run").addEventListener("click", run);
+    $("download").addEventListener("click", download);
+    $("onlyMismatch").addEventListener("change", () => lastReport && buildTable(lastReport));
+
+    if (!("DecompressionStream" in window)) {
+      setStatus("Your browser is too old to read .xlsx here (needs DecompressionStream). Please use an up-to-date Chrome, Edge, Firefox or Safari.", true);
+    }
+  </script>
+</body>
+</html>
