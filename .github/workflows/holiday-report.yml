@@ -18,6 +18,11 @@ on:
         required: false
         type: string
         default: "MM/DD/YYYY"
+      currencies:
+        description: "Comma-separated currencies to include (e.g. USD,CAD,HKD). Leave blank for all."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -43,10 +48,15 @@ jobs:
           if [ -n "${{ inputs.input_file }}" ]; then
             FILE_ARG="--file ${{ inputs.input_file }}"
           fi
+          CCY_ARG=""
+          if [ -n "${{ inputs.currencies }}" ]; then
+            CCY_ARG="--currencies ${{ inputs.currencies }}"
+          fi
           python compare_holidays.py \
             --source "${{ inputs.source_system }}" \
             --date-format "${{ inputs.date_format }}" \
             $FILE_ARG \
+            $CCY_ARG \
             --output "output/holiday_comparison.csv"
 
       - name: Upload report artifact

@@ -63,6 +63,23 @@
     tr.src-col th.src, td.src { background: rgba(37,99,235,.06); }
     .filter-row { margin: 12px 0 0; }
     .filter-row label { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+    .ccy-panel { margin-top: 16px; }
+    .ccy-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+    .ccy-head label { margin: 0; }
+    .ccy-actions { display: flex; gap: 10px; }
+    .ccy-actions a { color: var(--accent); font-size: 13px; cursor: pointer; text-decoration: none; }
+    .ccy-actions a:hover { text-decoration: underline; }
+    .ccy-list {
+      display: flex; flex-wrap: wrap; gap: 8px; max-height: 160px; overflow-y: auto;
+      border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--bg);
+    }
+    .ccy-chip {
+      display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px;
+      border: 1px solid var(--border); border-radius: 999px; font-size: 13px; font-weight: 600;
+      cursor: pointer; user-select: none; background: var(--panel);
+    }
+    .ccy-chip input { margin: 0; }
+    .ccy-empty { color: var(--muted); font-size: 13px; }
     .privacy { font-size: 12px; color: var(--muted); margin-top: 18px; text-align: center; }
     code { background: var(--bg); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); }
   </style>
@@ -99,6 +116,18 @@
       </div>
       <p class="status" id="status"></p>
       <p class="hint">Tip: the tab/sheet name is used as the system name — an in-sheet “System” column is ignored. Dates default to MM/DD/YYYY.</p>
+
+      <div class="ccy-panel" id="ccyPanel" hidden>
+        <div class="ccy-head">
+          <label>Currencies to compare</label>
+          <div class="ccy-actions">
+            <a id="ccyAll">Select all</a>
+            <a id="ccyNone">Clear</a>
+          </div>
+        </div>
+        <div class="ccy-list" id="ccyList"></div>
+        <p class="hint">Only the selected currencies appear in the report. Leave all selected to include everything.</p>
+      </div>
     </div>
 
     <div class="panel" id="results" hidden>
@@ -133,9 +162,42 @@
       return new Uint8Array(ab);
     }
 
+    function populateCurrencies() {
+      const list = $("ccyList");
+      list.innerHTML = "";
+      const currencies = HolidayCore.listCurrencies(wb);
+      if (!currencies.length) {
+        list.innerHTML = '<span class="ccy-empty">No currencies detected in this file.</span>';
+        $("ccyPanel").hidden = false;
+        return;
+      }
+      currencies.forEach((c) => {
+        const label = document.createElement("label");
+        label.className = "ccy-chip";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = c;
+        cb.checked = true;
+        cb.className = "ccy-cb";
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(c));
+        list.appendChild(label);
+      });
+      $("ccyPanel").hidden = false;
+    }
+
+    function selectedCurrencies() {
+      const boxes = [...document.querySelectorAll(".ccy-cb")];
+      if (!boxes.length) return null;
+      const checked = boxes.filter((b) => b.checked).map((b) => b.value);
+      // All selected (or none of the boxes) ⇒ no filter (include everything).
+      return checked.length === boxes.length ? null : checked;
+    }
+
     async function onFile() {
       const file = $("file").files[0];
       $("results").hidden = true;
+      $("ccyPanel").hidden = true;
       $("run").disabled = true;
       $("source").disabled = true;
       if (!file) return;
@@ -154,6 +216,7 @@
         });
         sel.disabled = false;
         $("run").disabled = false;
+        populateCurrencies();
         setStatus(`Loaded ${wb.order.length} systems: ${wb.order.join(", ")}. Choose a source and click Compare.`);
       } catch (e) {
         wb = null;
@@ -163,13 +226,18 @@
 
     async function run() {
       if (!wb) return;
+      const ccyBoxes = [...document.querySelectorAll(".ccy-cb")];
+      if (ccyBoxes.length && !ccyBoxes.some((b) => b.checked)) {
+        setStatus("Select at least one currency to compare.", true);
+        return;
+      }
       setStatus("Comparing…");
       try {
         // Re-parse with the chosen date format so text-date interpretation is correct.
         const buf = await readFileBuffer($("file").files[0]);
         wb = await HolidayCore.loadWorkbook(buf, $("fmt").value);
         const source = HolidayCore.resolveSource(wb.order, $("source").value);
-        lastReport = HolidayCore.buildReport(wb, source, $("fmt").value);
+        lastReport = HolidayCore.buildReport(wb, source, $("fmt").value, selectedCurrencies());
         renderReport(lastReport, source);
         setStatus("");
       } catch (e) {
@@ -231,6 +299,12 @@
     $("run").addEventListener("click", run);
     $("download").addEventListener("click", download);
     $("onlyMismatch").addEventListener("change", () => lastReport && buildTable(lastReport));
+    $("ccyAll").addEventListener("click", () => {
+      document.querySelectorAll(".ccy-cb").forEach((b) => (b.checked = true));
+    });
+    $("ccyNone").addEventListener("click", () => {
+      document.querySelectorAll(".ccy-cb").forEach((b) => (b.checked = false));
+    });
 
     if (!("DecompressionStream" in window)) {
       setStatus("Your browser is too old to read .xlsx here (needs DecompressionStream). Please use an up-to-date Chrome, Edge, Firefox or Safari.", true);

@@ -353,12 +353,28 @@
     return order.find((n) => n.toLowerCase() === lower) || null;
   }
 
-  function buildReport(wb, source, outFormat) {
+  // Sorted list of every distinct currency present across all systems.
+  function listCurrencies(wb) {
+    const set = new Set();
+    for (const pairs of wb.systems.values()) {
+      for (const v of pairs.values()) set.add(v.cur);
+    }
+    return [...set].sort();
+  }
+
+  function buildReport(wb, source, outFormat, currencyFilter) {
     const others = wb.order.filter((s) => s !== source);
     const systemCols = [source, ...others];
+    // Optional whitelist of currencies to include; null/undefined = all.
+    const filter = currencyFilter && currencyFilter.length
+      ? new Set(currencyFilter.map((c) => String(c).toUpperCase()))
+      : null;
     const all = new Map();
     for (const pairs of wb.systems.values()) {
-      for (const [k, v] of pairs) all.set(k, v);
+      for (const [k, v] of pairs) {
+        if (filter && !filter.has(v.cur)) continue;
+        all.set(k, v);
+      }
     }
     const header = ["Currency", "Date", ...systemCols, "Status", "Missing_In"];
     const keys = [...all.keys()].sort((a, b) => {
@@ -390,7 +406,7 @@
     return [header, ...rows].map((r) => r.map(esc).join(",")).join("\r\n");
   }
 
-  const api = { loadWorkbook, buildReport, resolveSource, toCSV, formatYMD, parseTextDate };
+  const api = { loadWorkbook, buildReport, resolveSource, toCSV, formatYMD, parseTextDate, listCurrencies };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.HolidayCore = api;
 })(typeof window !== "undefined" ? window : globalThis);

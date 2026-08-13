@@ -233,15 +233,23 @@ def resolve_source(systems, requested):
     return None
 
 
-def build_report(systems, order, source, out_format):
-    """Return (header_row, data_rows) for the CSV report."""
+def build_report(systems, order, source, out_format, currencies=None):
+    """Return (header_row, data_rows) for the CSV report.
+
+    If `currencies` is a non-empty iterable, only those currency codes are
+    included; otherwise every currency found is reported.
+    """
     other_systems = [s for s in order if s != source]
     system_cols = [source] + other_systems
+
+    ccy_filter = {c.upper() for c in currencies} if currencies else None
 
     # Union of every (currency, date) across all systems.
     all_pairs = set()
     for pairs in systems.values():
         all_pairs |= pairs
+    if ccy_filter is not None:
+        all_pairs = {p for p in all_pairs if p[0] in ccy_filter}
 
     header = ["Currency", "Date"] + system_cols + ["Status", "Missing_In"]
     data_rows = []
@@ -282,7 +290,15 @@ def main(argv=None):
         default="MM/DD/YYYY",
         help="Date format for parsing text dates and for the report, e.g. MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD.",
     )
+    parser.add_argument(
+        "--currencies",
+        help="Comma-separated currency codes to include, e.g. USD,CAD,HKD. Omit to include all.",
+    )
     args = parser.parse_args(argv)
+
+    currencies = None
+    if args.currencies:
+        currencies = [c.strip().upper() for c in args.currencies.split(",") if c.strip()]
 
     out_format = friendly_to_strftime(args.date_format)
     # Try the user's format first, then common fallbacks, when parsing text dates.
@@ -319,7 +335,7 @@ def main(argv=None):
             f"Source system '{args.source}' not found. Available tabs: {', '.join(order)}"
         )
 
-    header, data_rows, system_cols = build_report(systems, order, source, out_format)
+    header, data_rows, system_cols = build_report(systems, order, source, out_format, currencies)
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w", newline="", encoding="utf-8") as f:

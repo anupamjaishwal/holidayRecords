@@ -60,8 +60,13 @@ needed to use it. This is the option for a locked-down / work machine.
   `docs/index.html` in a browser. Works with no network at all.
 
 **Steps:** pick your `.xlsx` → choose the **source system** → (optional) set the
-date format → **Compare** → **Download CSV**. Toggle *Show mismatches only* to
-focus on differences.
+date format → (optional) tick the **currencies to compare** → **Compare** →
+**Download CSV**. Toggle *Show mismatches only* to focus on differences.
+
+After a file is loaded, every currency found in the workbook appears as a
+checkbox (all selected by default). Untick any you don't care about — the report
+then shows only the currencies you keep selected. Use **Select all** / **Clear**
+to toggle them in bulk.
 
 > Requires a reasonably modern browser (Chrome/Edge/Firefox/Safari from ~2023+),
 > which is used to unzip the `.xlsx` locally.
@@ -83,7 +88,8 @@ afterwards visitors need no login):
 2. Go to the **Actions** tab → **Holiday Comparison Report** → **Run workflow**.
 3. Enter the **source system** (tab name, e.g. `WSS`). In the file field, type the
    filename (e.g. `calendar_2026.xlsx`) — or leave it blank to use the newest file
-   in `input/`. Optionally set the date format.
+   in `input/`. Optionally set the date format, and optionally list the
+   **currencies** to include (e.g. `USD,CAD,HKD`; blank = all).
 4. The report is uploaded as a downloadable **artifact** and committed to
    `output/holiday_comparison.csv`.
 
@@ -101,6 +107,9 @@ python compare_holidays.py --file input/holidays.xlsx --source WSS --output outp
 
 # use a different date format (default is MM/DD/YYYY)
 python compare_holidays.py --source WSS --date-format DD/MM/YYYY
+
+# only compare specific currencies (omit --currencies to include all)
+python compare_holidays.py --source WSS --currencies USD,CAD,HKD
 ```
 
 The source name is matched case-insensitively; if it isn't found, the available
