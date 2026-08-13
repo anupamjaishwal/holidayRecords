@@ -39,6 +39,12 @@ The currency column is recognised from headers like `Holiday Ccy`, `Currency`,
 codes as column headers, dates listed beneath) is also auto-detected. Real Excel
 date cells are accepted as well as text.
 
+**Optional description columns:** if the **source tab** has `EventDayOfWeek`
+and/or `EventName` columns, their values are carried into the report (right
+after the `Date` column). These are read from the source tab only — if other
+tabs don't have them, or the source tab doesn't either, nothing fails; the
+columns simply don't appear.
+
 ### Date format
 
 Dates default to **MM/DD/YYYY**. To use a different format, pass `--date-format`

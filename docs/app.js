@@ -18,6 +18,13 @@
   const DATE_HEADERS = new Set([
     "date", "dates", "holiday", "holiday date", "holidays", "holiday dates", "value",
   ]);
+  // Optional descriptive columns carried through from the source tab only.
+  // Matched on a "tight" header (lower-cased, spaces/underscores removed).
+  const DOW_HEADERS = new Set(["eventdayofweek", "dayofweek", "weekday", "day"]);
+  const NAME_HEADERS = new Set([
+    "eventname", "event", "holidayname", "eventdescription", "name", "description",
+  ]);
+  const tightHeader = (s) => String(s || "").trim().toLowerCase().replace(/[\s_]+/g, "");
   const BUILTIN_DATE_FMT_IDS = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47]);
   const CURRENCY_RE = /^[A-Za-z]{3}$/;
   const FALLBACK_FORMATS = ["MM/DD/YYYY", "DD/MM/YYYY", "YYYY-MM-DD", "MM-DD-YYYY"];
@@ -284,17 +291,22 @@
     const pairs = new Map();
     const maxRow = rows.length;
     // LONG: find header row with currency + date headers.
-    let curCol = null, dateCol = null, headerRow = -1;
+    let curCol = null, dateCol = null, dowCol = null, nameCol = null, headerRow = -1;
     for (let r = 0; r < Math.min(maxRow, 6); r++) {
       const row = rows[r];
       if (!row) continue;
-      let cc = null, dc = null;
+      let cc = null, dc = null, dw = null, nm = null;
       for (const k of Object.keys(row)) {
         const label = cellText(row[k]).toLowerCase();
+        const tight = tightHeader(cellText(row[k]));
         if (CURRENCY_HEADERS.has(label) && cc === null) cc = parseInt(k, 10);
         else if (DATE_HEADERS.has(label) && dc === null) dc = parseInt(k, 10);
+        else if (DOW_HEADERS.has(tight) && dw === null) dw = parseInt(k, 10);
+        else if (NAME_HEADERS.has(tight) && nm === null) nm = parseInt(k, 10);
       }
-      if (cc !== null && dc !== null) { curCol = cc; dateCol = dc; headerRow = r; break; }
+      if (cc !== null && dc !== null) {
+        curCol = cc; dateCol = dc; dowCol = dw; nameCol = nm; headerRow = r; break;
+      }
     }
     if (curCol !== null) {
       for (let r = headerRow + 1; r < maxRow; r++) {
@@ -302,7 +314,12 @@
         if (!row) continue;
         const cur = normCurrency(cellText(row[curCol]));
         const date = resolveDate(row[dateCol], fmt);
-        if (cur && date) pairs.set(cur + "|" + ymdKey(date), { cur, ymd: date });
+        if (cur && date) {
+          const rec = { cur, ymd: date };
+          if (dowCol !== null) rec.dow = cellText(row[dowCol]);
+          if (nameCol !== null) rec.name = cellText(row[nameCol]);
+          pairs.set(cur + "|" + ymdKey(date), rec);
+        }
       }
       return pairs;
     }
@@ -376,7 +393,16 @@
         all.set(k, v);
       }
     }
-    const header = ["Currency", "Date", ...systemCols, "Status", "Missing_In"];
+    // Descriptive columns come from the source tab only, and only if present there.
+    const sourcePairs = wb.systems.get(source);
+    const srcVals = sourcePairs ? [...sourcePairs.values()] : [];
+    const hasDow = srcVals.some((v) => "dow" in v);
+    const hasName = srcVals.some((v) => "name" in v);
+    const eventCols = [];
+    if (hasDow) eventCols.push("EventDayOfWeek");
+    if (hasName) eventCols.push("EventName");
+    const firstSystemCol = 2 + eventCols.length;
+    const header = ["Currency", "Date", ...eventCols, ...systemCols, "Status", "Missing_In"];
     const keys = [...all.keys()].sort((a, b) => {
       const A = all.get(a), B = all.get(b);
       if (A.cur !== B.cur) return A.cur < B.cur ? -1 : 1;
@@ -390,10 +416,14 @@
       const missing = systemCols.filter((s, i) => flags[i] === "N");
       const status = missing.length === 0 ? "MATCH" : "MISMATCH";
       if (status === "MATCH") matches++;
-      rows.push([cur, formatYMD(ymd, outFormat), ...flags, status, missing.join("; ")]);
+      const srec = sourcePairs && sourcePairs.get(key);
+      const eventVals = [];
+      if (hasDow) eventVals.push(srec && srec.dow != null ? srec.dow : "");
+      if (hasName) eventVals.push(srec && srec.name != null ? srec.name : "");
+      rows.push([cur, formatYMD(ymd, outFormat), ...eventVals, ...flags, status, missing.join("; ")]);
     }
     return {
-      header, rows, systemCols,
+      header, rows, systemCols, firstSystemCol,
       summary: { total: rows.length, matches, mismatches: rows.length - matches },
     };
   }

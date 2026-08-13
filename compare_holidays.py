@@ -53,6 +53,14 @@ CURRENCY_RE = re.compile(r"^[A-Za-z]{3}$")
 # intentionally NOT listed here — the system name always comes from the tab name.
 CURRENCY_HEADERS = {"currency", "ccy", "curr", "currency code", "holiday ccy", "holiday currency"}
 DATE_HEADERS = {"date", "dates", "holiday", "holiday date", "holidays", "holiday dates", "value"}
+# Optional descriptive columns, carried through from the source tab only.
+# Matched on a "tight" header (lower-cased, spaces/underscores removed).
+DOW_HEADERS = {"eventdayofweek", "dayofweek", "weekday", "day"}
+NAME_HEADERS = {"eventname", "event", "holidayname", "eventdescription", "name", "description"}
+
+
+def _tight_header(value) -> str:
+    return re.sub(r"[\s_]+", "", str(value).strip().lower()) if value is not None else ""
 
 # Fallback textual date formats always tried after the user-selected one.
 FALLBACK_DATE_FORMATS = ("%m/%d/%Y", "%d/%m/%Y", "%Y-%m-%d", "%m/%d/%y", "%m-%d-%Y")
@@ -109,38 +117,53 @@ def looks_like_currency(text) -> bool:
 def _find_header_columns(rows):
     """Locate a header row with currency + date columns (LONG layout).
 
-    Returns (header_row_index, currency_col, date_col) or None.
+    Returns (header_row_index, currency_col, date_col, dow_col, name_col) or None.
+    dow_col / name_col are None when those optional columns are absent.
     """
     for r_idx, row in enumerate(rows[:5]):  # header is near the top
-        currency_col = date_col = None
+        currency_col = date_col = dow_col = name_col = None
         for c_idx, cell in enumerate(row):
             if cell is None:
                 continue
             label = str(cell).strip().lower()
+            tight = _tight_header(cell)
             if label in CURRENCY_HEADERS and currency_col is None:
                 currency_col = c_idx
             elif label in DATE_HEADERS and date_col is None:
                 date_col = c_idx
+            elif tight in DOW_HEADERS and dow_col is None:
+                dow_col = c_idx
+            elif tight in NAME_HEADERS and name_col is None:
+                name_col = c_idx
         if currency_col is not None and date_col is not None:
-            return r_idx, currency_col, date_col
+            return r_idx, currency_col, date_col, dow_col, name_col
     return None
 
 
+def _cell_text(value) -> str:
+    return "" if value is None else str(value).strip()
+
+
 def parse_sheet(rows, formats):
-    """Parse one sheet's rows into a set of (currency, date) pairs.
+    """Parse one sheet's rows into (pairs, meta).
+
+    `pairs` is a set of (currency, date). `meta` maps (currency, date) to a dict
+    with optional 'dow'/'name' keys, populated only for the LONG layout when the
+    EventDayOfWeek / EventName columns are present.
 
     Handles LONG and WIDE layouts. `rows` is a list of tuples of cell values.
     The system name is NOT taken from the sheet contents (a "System" column is
     ignored) — callers key results by the tab/sheet name instead.
     """
     pairs: set[tuple[str, dt.date]] = set()
+    meta: dict[tuple[str, dt.date], dict] = {}
     if not rows:
-        return pairs
+        return pairs, meta
 
     header = _find_header_columns(rows)
     if header is not None:
         # --- LONG layout ---
-        h_idx, cur_col, date_col = header
+        h_idx, cur_col, date_col, dow_col, name_col = header
         for row in rows[h_idx + 1:]:
             if cur_col >= len(row) or date_col >= len(row):
                 continue
@@ -148,7 +171,14 @@ def parse_sheet(rows, formats):
             date = parse_date(row[date_col], formats)
             if currency and date:
                 pairs.add((currency, date))
-        return pairs
+                if dow_col is not None or name_col is not None:
+                    rec = {}
+                    if dow_col is not None:
+                        rec["dow"] = _cell_text(row[dow_col]) if dow_col < len(row) else ""
+                    if name_col is not None:
+                        rec["name"] = _cell_text(row[name_col]) if name_col < len(row) else ""
+                    meta[(currency, date)] = rec
+        return pairs, meta
 
     # --- WIDE layout: currency codes as column headers ---
     header_row_idx = None
@@ -173,7 +203,7 @@ def parse_sheet(rows, formats):
                     date = parse_date(row[c_idx], formats)
                     if date:
                         pairs.add((currency, date))
-        return pairs
+        return pairs, meta
 
     # --- Fallback: detect a currency column and any date columns by content ---
     n_cols = max(len(row) for row in rows)
@@ -190,7 +220,7 @@ def parse_sheet(rows, formats):
                 date_score[c_idx] += 1
 
     if max(currency_score, default=0) == 0:
-        return pairs
+        return pairs, meta
     cur_col = currency_score.index(max(currency_score))
     date_cols = [i for i, s in enumerate(date_score) if s > 0 and i != cur_col]
     for row in rows:
@@ -204,7 +234,7 @@ def parse_sheet(rows, formats):
                 date = parse_date(row[dc], formats)
                 if date:
                     pairs.add((currency, date))
-    return pairs
+    return pairs, meta
 
 
 def read_workbook(path, formats):
@@ -214,13 +244,16 @@ def read_workbook(path, formats):
     """
     wb = load_workbook(path, data_only=True, read_only=True)
     systems = {}
+    metas = {}
     order = []
     for sheet in wb.worksheets:
         rows = [tuple(r) for r in sheet.iter_rows(values_only=True)]
-        systems[sheet.title] = parse_sheet(rows, formats)
+        pairs, meta = parse_sheet(rows, formats)
+        systems[sheet.title] = pairs
+        metas[sheet.title] = meta
         order.append(sheet.title)
     wb.close()
-    return systems, order
+    return systems, metas, order
 
 
 def resolve_source(systems, requested):
@@ -233,11 +266,13 @@ def resolve_source(systems, requested):
     return None
 
 
-def build_report(systems, order, source, out_format, currencies=None):
+def build_report(systems, order, source, out_format, currencies=None, metas=None):
     """Return (header_row, data_rows) for the CSV report.
 
     If `currencies` is a non-empty iterable, only those currency codes are
-    included; otherwise every currency found is reported.
+    included; otherwise every currency found is reported. When the source tab
+    carries EventDayOfWeek / EventName columns (via `metas`), those values are
+    added to the report right after the Date column.
     """
     other_systems = [s for s in order if s != source]
     system_cols = [source] + other_systems
@@ -251,7 +286,17 @@ def build_report(systems, order, source, out_format, currencies=None):
     if ccy_filter is not None:
         all_pairs = {p for p in all_pairs if p[0] in ccy_filter}
 
-    header = ["Currency", "Date"] + system_cols + ["Status", "Missing_In"]
+    # Descriptive columns come from the source tab only, and only if present.
+    source_meta = (metas or {}).get(source, {})
+    has_dow = any("dow" in rec for rec in source_meta.values())
+    has_name = any("name" in rec for rec in source_meta.values())
+    event_cols = []
+    if has_dow:
+        event_cols.append("EventDayOfWeek")
+    if has_name:
+        event_cols.append("EventName")
+
+    header = ["Currency", "Date"] + event_cols + system_cols + ["Status", "Missing_In"]
     data_rows = []
     for currency, date in sorted(all_pairs, key=lambda p: (p[0], p[1])):
         flags = {}
@@ -260,6 +305,11 @@ def build_report(systems, order, source, out_format, currencies=None):
         missing_in = [s for s in system_cols if flags[s] == "N"]
         status = "MATCH" if not missing_in else "MISMATCH"
         row = [currency, date.strftime(out_format)]
+        rec = source_meta.get((currency, date), {})
+        if has_dow:
+            row.append(rec.get("dow", ""))
+        if has_name:
+            row.append(rec.get("name", ""))
         row += [flags[s] for s in system_cols]
         row += [status, "; ".join(missing_in)]
         data_rows.append(row)
@@ -325,7 +375,7 @@ def main(argv=None):
         else:
             parser.error(f"File not found: {path} (also looked in input/)")
 
-    systems, order = read_workbook(path, parse_formats)
+    systems, metas, order = read_workbook(path, parse_formats)
     if not systems:
         parser.error("Workbook has no sheets.")
 
@@ -335,7 +385,7 @@ def main(argv=None):
             f"Source system '{args.source}' not found. Available tabs: {', '.join(order)}"
         )
 
-    header, data_rows, system_cols = build_report(systems, order, source, out_format, currencies)
+    header, data_rows, system_cols = build_report(systems, order, source, out_format, currencies, metas)
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w", newline="", encoding="utf-8") as f:

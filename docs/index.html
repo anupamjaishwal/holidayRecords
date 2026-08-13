@@ -259,9 +259,10 @@
     function buildTable(rep) {
       const onlyMismatch = $("onlyMismatch").checked;
       const statusIdx = rep.header.length - 2;
+      const firstSys = rep.firstSystemCol != null ? rep.firstSystemCol : 2;
       let html = "<thead><tr class='src-col'>";
       rep.header.forEach((h, i) => {
-        const isSrc = i === 2; // first system column = source
+        const isSrc = i === firstSys; // first system column = source
         html += `<th class="${isSrc ? "src" : ""}">${h}</th>`;
       });
       html += "</tr></thead><tbody>";
@@ -269,8 +270,8 @@
         if (onlyMismatch && row[statusIdx] === "MATCH") continue;
         html += "<tr>";
         row.forEach((cell, i) => {
-          if (i >= 2 && i < statusIdx) {
-            const cls = (cell === "Y" ? "y" : "n") + (i === 2 ? " src" : "");
+          if (i >= firstSys && i < statusIdx) {
+            const cls = (cell === "Y" ? "y" : "n") + (i === firstSys ? " src" : "");
             html += `<td class="${cls}">${cell}</td>`;
           } else if (i === statusIdx) {
             html += `<td class="status-${cell}">${cell}</td>`;
